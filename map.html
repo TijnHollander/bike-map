@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Köln — Hotspot Verbindingsanalyse</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: rgba(255,255,255,0.07);
+    --text: #f0ede8;
+    --muted: #888880;
+    --hint: #555550;
+    --red: #ff4433;
+    --amber: #ffaa00;
+    --green: #44cc77;
+    --blue: #4499ff;
+    --line-color: rgba(255,180,0,0.7);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    z-index: 200;
+  }
+
+  .hdr-title { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
+  .hdr-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  .hdr-right { display: flex; align-items: center; gap: 10px; }
+
+  .mode-pill {
+    display: flex;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .mode-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Syne', sans-serif;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .mode-btn.active { background: var(--text); color: var(--bg); }
+
+  .btn-action {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Syne', sans-serif;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-action:hover { border-color: var(--amber); color: var(--amber); }
+  .btn-action.danger { border-color: rgba(255,68,51,0.3); color: var(--red); }
+  .btn-action.danger:hover { background: rgba(255,68,51,0.1); }
+  .btn-action.primary { background: var(--amber); color: #000; border-color: var(--amber); }
+  .btn-action.primary:hover { opacity: 0.85; }
+
+  /* ── Layout ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Map ── */
+  #map {
+    flex: 1;
+    background: #111;
+    position: relative;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 300px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .sidebar-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--hint);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  /* ── Instruction banner ── */
+  #instruction {
+    margin: 14px 16px 0;
+    background: rgba(255,170,0,0.08);
+    border: 1px solid rgba(255,170,0,0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--amber);
+    line-height: 1.5;
+    flex-shrink: 0;
+  }
+
+  /* ── Connection list ── */
+  .conn-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .conn-list::-webkit-scrollbar { width: 3px; }
+  .conn-list::-webkit-scrollbar-thumb { background: var(--hint); border-radius: 2px; }
+
+  .conn-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 11px;
+    animation: slideIn 0.25s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .conn-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .conn-text { flex: 1; color: var(--text); line-height: 1.4; }
+  .conn-weight {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .conn-del {
+    background: none;
+    border: none;
+    color: var(--hint);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .conn-del:hover { color: var(--red); }
+
+  /* ── Recommendation cards ── */
+  .rec-list {
+    padding: 8px;
+    overflow-y: auto;
+    max-height: 200px;
+  }
+
+  .rec-list::-webkit-scrollbar { width: 3px; }
+  .rec-list::-webkit-scrollbar-thumb { background: var(--hint); border-radius: 2px; }
+
+  .rec-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: rgba(68,204,119,0.06);
+    border: 1px solid rgba(68,204,119,0.15);
+    border-radius: 8px;
+    font-size: 11px;
+    animation: slideIn 0.3s ease;
+  }
+
+  .rec-rank {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--green);
+    line-height: 1;
+    min-width: 20px;
+  }
+
+  .rec-name { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .rec-why { color: var(--muted); line-height: 1.4; }
+
+  /* ── Stats bar ── */
+  .stats-row {
+    display: flex;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .stat-cell {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+
+  .stat-cell:last-child { border-right: none; }
+
+  .stat-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-lbl {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--hint);
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-line {
+    width: 20px; height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── Leaflet overrides ── */
+  .leaflet-popup-content-wrapper {
+    background: var(--surface) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    color: var(--text) !important;
+    font-family: 'Syne', sans-serif !important;
+  }
+
+  .leaflet-popup-tip { background: var(--surface) !important; }
+  .leaflet-popup-close-button { color: var(--muted) !important; top: 8px !important; right: 8px !important; }
+
+  .popup-title {
+    font-size: 14px;
+    font-weight: 800;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .popup-row {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  .popup-row strong { color: var(--text); }
+
+  .popup-connect-btn {
+    margin-top: 10px;
+    width: 100%;
+    padding: 7px;
+    background: var(--amber);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+  }
+
+  .popup-connect-btn.active {
+    background: var(--green);
+  }
+
+  /* ── Cursor on map ── */
+  .leaflet-container { cursor: default !important; }
+  .leaflet-container.connect-mode { cursor: crosshair !important; }
+
+  /* ── Recommended stalling marker pulse ── */
+  @keyframes stallPulse {
+    0% { box-shadow: 0 0 0 0 rgba(68,204,119,0.6); }
+    70% { box-shadow: 0 0 0 12px rgba(68,204,119,0); }
+    100% { box-shadow: 0 0 0 0 rgba(68,204,119,0); }
+  }
+
+  .stalling-icon { animation: stallPulse 2s infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="hdr-title">🔗 Hotspot Verbindingsanalyse — Köln</div>
+    <div class="hdr-sub">Koppel hotspots · analyseer corridors · vind optimale stallinglocaties</div>
+  </div>
+  <div class="hdr-right">
+    <div class="mode-pill">
+      <button class="mode-btn active" id="btn-view" onclick="setMode('view')">Bekijken</button>
+      <button class="mode-btn" id="btn-connect" onclick="setMode('connect')">Verbinden</button>
+    </div>
+    <button class="btn-action primary" onclick="analyzeAndRecommend()">🔍 Analyseer</button>
+    <button class="btn-action danger" onclick="clearAll()">Wissen</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div id="map"></div>
+
+  <div class="sidebar">
+
+    <div id="instruction">
+      <strong>📌 Hoe werkt het?</strong><br>
+      1. Zet modus op <strong>Verbinden</strong><br>
+      2. Klik op een hotspot (start)<br>
+      3. Klik op een tweede hotspot (einde)<br>
+      4. Druk op <strong>Analyseer</strong> voor stallingadvies
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Legenda</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#ff4433;box-shadow:0 0 6px #ff4433"></div>Extreem risico</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff7700"></div>Zeer hoog risico</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffaa00"></div>Hoog risico</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffdd55"></div>Matig risico</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#aaddff"></div>Laag risico</div>
+        <div class="legend-item" style="margin-top:4px"><div class="legend-line" style="background:rgba(255,180,0,0.8)"></div>Verbindingslijn</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#44cc77;border-radius:3px"></div>Aanbevolen stalling</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="flex-shrink:0">
+      <div class="sidebar-label">Verbindingen (<span id="conn-count">0</span>)</div>
+    </div>
+
+    <div class="conn-list" id="conn-list">
+      <div style="padding:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--hint);text-align:center;line-height:1.6;">
+        Nog geen verbindingen.<br>Zet modus op Verbinden<br>en klik op twee hotspots.
+      </div>
+    </div>
+
+    <div id="rec-section" style="display:none;flex-shrink:0">
+      <div class="sidebar-section">
+        <div class="sidebar-label">🅿️ Aanbevolen stallinglocaties</div>
+      </div>
+      <div class="rec-list" id="rec-list"></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-cell">
+        <div class="stat-val" id="stat-conn">0</div>
+        <div class="stat-lbl">Verbindingen</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val" id="stat-hotspots">0</div>
+        <div class="stat-lbl">Hotspots</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val" id="stat-risk">—</div>
+        <div class="stat-lbl">Max. risico</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Data ──
+const hotspots = [
+  { id: 'inn', name: 'Innenstadt', lat: 50.9380, lng: 6.9570, thefts: 2200, risk: 5, color: '#ff4433' },
+  { id: 'hbf', name: 'Hauptbahnhof', lat: 50.9430, lng: 6.9590, thefts: 1600, risk: 5, color: '#ff4433' },
+  { id: 'ehr', name: 'Ehrenfeld', lat: 50.9510, lng: 6.9100, thefts: 1100, risk: 4, color: '#ff7700' },
+  { id: 'nip', name: 'Nippes', lat: 50.9636, lng: 6.9490, thefts: 950, risk: 4, color: '#ff7700' },
+  { id: 'nns', name: 'Neustadt-Nord/Süd', lat: 50.9380, lng: 6.9650, thefts: 870, risk: 4, color: '#ff7700' },
+  { id: 'mul', name: 'Mülheim', lat: 50.9620, lng: 7.0020, thefts: 680, risk: 3, color: '#ffaa00' },
+  { id: 'kal', name: 'Kalk', lat: 50.9333, lng: 7.0167, thefts: 620, risk: 3, color: '#ffaa00' },
+  { id: 'lin', name: 'Lindenthal', lat: 50.9230, lng: 6.9000, thefts: 540, risk: 3, color: '#ffaa00' },
+  { id: 'deu', name: 'Deutz', lat: 50.9290, lng: 6.9820, thefts: 420, risk: 2, color: '#ffdd55' },
+  { id: 'zue', name: 'Zülpicher Str.', lat: 50.9310, lng: 6.9440, thefts: 380, risk: 2, color: '#ffdd55' },
+  { id: 'ven', name: 'Venloer Str.', lat: 50.9490, lng: 6.9180, thefts: 340, risk: 2, color: '#ffdd55' },
+  { id: 'rod', name: 'Rodenkirchen', lat: 50.8845, lng: 6.9650, thefts: 200, risk: 1, color: '#aaddff' },
+  { id: 'cho', name: 'Chorweiler', lat: 51.0167, lng: 6.9167, thefts: 170, risk: 1, color: '#aaddff' },
+];
+
+// Potential stalling locations (midpoints + strategic spots)
+const stallingCandidates = [
+  { id: 's1', name: 'Hauptbahnhof West-ingang', lat: 50.9428, lng: 6.9540, desc: 'Drukste knooppunt van Köln' },
+  { id: 's2', name: 'Ebertplatz', lat: 50.9540, lng: 6.9560, desc: 'Corridor Innenstadt ↔ Nippes' },
+  { id: 's3', name: 'Friesenplatz', lat: 50.9415, lng: 6.9460, desc: 'Corridor Neustadt ↔ Innenstadt' },
+  { id: 's4', name: 'Ehrenfeld Bahnhof', lat: 50.9480, lng: 6.9150, desc: 'S-Bahn knooppunt Ehrenfeld' },
+  { id: 's5', name: 'Nippes Markt', lat: 50.9610, lng: 6.9500, desc: 'Centrum Nippes hotspot-zone' },
+  { id: 's6', name: 'Wiener Platz Mülheim', lat: 50.9590, lng: 6.9970, desc: 'Mülheim transitzone' },
+  { id: 's7', name: 'Deutz Bf. (rechts Rhein)', lat: 50.9410, lng: 6.9780, desc: 'Brug-corridor Deutz ↔ Innenstadt' },
+  { id: 's8', name: 'Zülpicher Platz', lat: 50.9300, lng: 6.9430, desc: 'Studenten-uitgaansgebied nacht' },
+  { id: 's9', name: 'Barbarossaplatz', lat: 50.9330, lng: 6.9590, desc: 'Knooppunt zuidelijke Ring' },
+  { id: 's10', name: 'Kalk Post', lat: 50.9350, lng: 7.0140, desc: 'Kalk—Deutz corridor' },
+];
+
+// ── State ──
+let mode = 'view';
+let selectedFirst = null;
+let connections = [];
+let connLines = [];
+let stallingMarkers = [];
+let hotspotMarkers = {};
+
+// ── Map init ──
+const map = L.map('map', {
+  center: [50.9380, 6.9600],
+  zoom: 13,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+// ── Create hotspot markers ──
+hotspots.forEach(h => {
+  const radius = 320 + h.thefts / 8;
+
+  // Glow circle
+  const glow = L.circle([h.lat, h.lng], {
+    radius: radius * 1.6,
+    color: 'transparent',
+    fillColor: h.color,
+    fillOpacity: 0.06,
+    interactive: false
+  }).addTo(map);
+
+  // Main circle
+  const circle = L.circle([h.lat, h.lng], {
+    radius,
+    color: h.color,
+    fillColor: h.color,
+    fillOpacity: 0.18,
+    weight: 1.5,
+    opacity: 0.85
+  }).addTo(map);
+
+  // Label
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      font-family:'Syne',sans-serif;
+      font-size:11px;
+      font-weight:700;
+      color:${h.color};
+      white-space:nowrap;
+      text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,0.8);
+      pointer-events:none;
+    ">${h.name}</div>`,
+    iconAnchor: [0, 0]
+  });
+
+  L.marker([h.lat + 0.003, h.lng], { icon, interactive: false }).addTo(map);
+
+  // Click handler
+  circle.on('click', () => handleHotspotClick(h, circle));
+  circle.on('mouseover', () => {
+    if (mode === 'connect') circle.setStyle({ fillOpacity: 0.35, weight: 2.5 });
+  });
+  circle.on('mouseout', () => {
+    if (selectedFirst?.id !== h.id) circle.setStyle({ fillOpacity: 0.18, weight: 1.5 });
+  });
+
+  // Popup
+  circle.bindPopup(`
+    <div class="popup-title">
+      <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${h.color}"></span>
+      ${h.name}
+    </div>
+    <div class="popup-row">Geschatte diefstallen: <strong>~${h.thefts.toLocaleString()}/jaar</strong></div>
+    <div class="popup-row">Risiconiveau: <strong>${['','Laag','Laag','Hoog','Zeer hoog','Extreem'][h.risk]}</strong></div>
+    <button class="popup-connect-btn" onclick="startConnectFrom('${h.id}')">
+      ${mode === 'connect' ? '🔗 Verbind vanaf hier' : '🔗 Activeer verbinden'}
+    </button>
+  `);
+
+  hotspotMarkers[h.id] = { circle, glow, h };
+});
+
+// ── Mode switching ──
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-view').classList.toggle('active', m === 'view');
+  document.getElementById('btn-connect').classList.toggle('active', m === 'connect');
+  document.getElementById('map').classList.toggle('connect-mode', m === 'connect');
+
+  document.getElementById('instruction').innerHTML = m === 'connect'
+    ? '<strong>🔗 Verbindingsmodus actief</strong><br>Klik op een eerste hotspot, dan op een tweede om ze te verbinden. Verbindingssterkte = gecombineerd risico.'
+    : '<strong>📌 Bekijkmodus</strong><br>Klik op cirkels voor details. Schakel naar <strong>Verbinden</strong> om corridors te tekenen.';
+
+  if (m === 'view') {
+    selectedFirst = null;
+    resetAllHighlights();
+  }
+}
+
+function startConnectFrom(id) {
+  map.closePopup();
+  setMode('connect');
+  const found = hotspots.find(h => h.id === id);
+  if (found) handleHotspotClick(found, hotspotMarkers[found.id].circle);
+}
+
+// ── Hotspot click ──
+function handleHotspotClick(h, circle) {
+  if (mode !== 'connect') return;
+
+  if (!selectedFirst) {
+    // Select first
+    selectedFirst = h;
+    circle.setStyle({ fillOpacity: 0.5, weight: 3, color: '#ffdd00' });
+    document.getElementById('instruction').innerHTML =
+      `<strong>✅ Geselecteerd: ${h.name}</strong><br>Klik nu op een tweede hotspot om te verbinden.`;
+  } else {
+    if (selectedFirst.id === h.id) {
+      selectedFirst = null;
+      resetAllHighlights();
+      return;
+    }
+
+    // Check duplicate
+    const exists = connections.find(c =>
+      (c.a.id === selectedFirst.id && c.b.id === h.id) ||
+      (c.a.id === h.id && c.b.id === selectedFirst.id)
+    );
+
+    if (exists) {
+      document.getElementById('instruction').innerHTML =
+        `<span style="color:#ff4433">⚠️ Deze verbinding bestaat al.</span><br>Kies een andere hotspot.`;
+      return;
+    }
+
+    // Create connection
+    addConnection(selectedFirst, h);
+    selectedFirst = null;
+    resetAllHighlights();
+    document.getElementById('instruction').innerHTML =
+      `<strong>🔗 Verbinding toegevoegd!</strong><br>Klik op een volgende hotspot om door te gaan.`;
+  }
+}
+
+function resetAllHighlights() {
+  hotspots.forEach(h => {
+    hotspotMarkers[h.id].circle.setStyle({ fillOpacity: 0.18, weight: 1.5, color: h.color });
+  });
+}
+
+// ── Add connection ──
+function addConnection(a, b) {
+  const weight = ((a.risk + b.risk) / 10 * 4 + 1);
+  const opacity = 0.4 + (a.risk + b.risk) / 20;
+
+  const line = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], {
+    color: '#ffaa00',
+    weight,
+    opacity,
+    dashArray: null,
+    lineCap: 'round'
+  }).addTo(map);
+
+  // Midpoint marker
+  const midLat = (a.lat + b.lat) / 2;
+  const midLng = (a.lng + b.lng) / 2;
+  const combinedRisk = a.risk + b.risk;
+
+  const midIcon = L.divIcon({
+    className: '',
+    html: `<div style="
+      background:rgba(255,170,0,0.9);
+      color:#000;
+      font-family:'DM Mono',monospace;
+      font-size:10px;
+      font-weight:500;
+      padding:2px 7px;
+      border-radius:4px;
+      white-space:nowrap;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+    ">risico ${combinedRisk}/10</div>`,
+    iconAnchor: [30, 10]
+  });
+
+  const midMarker = L.marker([midLat, midLng], { icon: midIcon, interactive: false }).addTo(map);
+
+  const conn = { a, b, line, midMarker, combinedRisk };
+  connections.push(conn);
+  connLines.push(line);
+
+  updateSidebar();
+  updateStats();
+}
+
+// ── Update sidebar connection list ──
+function updateSidebar() {
+  const list = document.getElementById('conn-list');
+
+  if (connections.length === 0) {
+    list.innerHTML = `<div style="padding:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--hint);text-align:center;line-height:1.6;">Nog geen verbindingen.<br>Zet modus op Verbinden<br>en klik op twee hotspots.</div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  connections.forEach((c, i) => {
+    const item = document.createElement('div');
+    item.className = 'conn-item';
+
+    const col = c.combinedRisk >= 8 ? '#ff4433' : c.combinedRisk >= 6 ? '#ff7700' : '#ffaa00';
+    item.innerHTML = `
+      <div class="conn-dot" style="background:${col}"></div>
+      <div class="conn-text">${c.a.name} ↔ ${c.b.name}</div>
+      <div class="conn-weight">${c.combinedRisk}/10</div>
+      <button class="conn-del" onclick="removeConnection(${i})" title="Verwijder">×</button>
+    `;
+    list.appendChild(item);
+  });
+
+  document.getElementById('conn-count').textContent = connections.length;
+}
+
+// ── Remove connection ──
+function removeConnection(idx) {
+  const c = connections[idx];
+  map.removeLayer(c.line);
+  map.removeLayer(c.midMarker);
+  connections.splice(idx, 1);
+  updateSidebar();
+  updateStats();
+  clearRecommendations();
+}
+
+// ── Update stats ──
+function updateStats() {
+  document.getElementById('stat-conn').textContent = connections.length;
+  const involvedIds = new Set();
+  connections.forEach(c => { involvedIds.add(c.a.id); involvedIds.add(c.b.id); });
+  document.getElementById('stat-hotspots').textContent = involvedIds.size;
+
+  if (connections.length > 0) {
+    const maxRisk = Math.max(...connections.map(c => c.combinedRisk));
+    document.getElementById('stat-risk').textContent = maxRisk + '/10';
+  } else {
+    document.getElementById('stat-risk').textContent = '—';
+  }
+}
+
+// ── Analyze & recommend ──
+function analyzeAndRecommend() {
+  if (connections.length === 0) {
+    alert('Voeg eerst verbindingen toe tussen hotspots om te analyseren.');
+    return;
+  }
+
+  // Clear old stalling markers
+  clearRecommendations();
+
+  // Score stalling candidates based on proximity to connections
+  const scores = stallingCandidates.map(s => {
+    let score = 0;
+    connections.forEach(c => {
+      // Distance to line midpoint
+      const midLat = (c.a.lat + c.b.lat) / 2;
+      const midLng = (c.a.lng + c.b.lng) / 2;
+      const dist = Math.sqrt(Math.pow(s.lat - midLat, 2) + Math.pow(s.lng - midLng, 2));
+
+      // Score inversely proportional to distance, weighted by connection risk
+      score += (c.combinedRisk / (dist * 150 + 0.001));
+
+      // Bonus if near endpoint hotspot
+      const distA = Math.sqrt(Math.pow(s.lat - c.a.lat, 2) + Math.pow(s.lng - c.a.lng, 2));
+      const distB = Math.sqrt(Math.pow(s.lat - c.b.lat, 2) + Math.pow(s.lng - c.b.lng, 2));
+      if (distA < 0.01) score += c.a.risk * 2;
+      if (distB < 0.01) score += c.b.risk * 2;
+    });
+    return { ...s, score };
+  });
+
+  scores.sort((a, b) => b.score - a.score);
+  const top = scores.slice(0, 5);
+
+  // Place markers
+  top.forEach((s, i) => {
+    const icon = L.divIcon({
+      className: 'stalling-icon',
+      html: `<div style="
+        width:30px;height:30px;
+        background:#44cc77;
+        border:2px solid #fff;
+        border-radius:6px;
+        display:flex;align-items:center;justify-content:center;
+        font-size:14px;
+        box-shadow:0 2px 12px rgba(68,204,119,0.5);
+        cursor:pointer;
+      ">🅿</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
+
+    const marker = L.marker([s.lat, s.lng], { icon }).addTo(map);
+    marker.bindPopup(`
+      <div class="popup-title" style="color:#44cc77">🅿 ${s.name}</div>
+      <div class="popup-row">Prioriteit: <strong>#${i+1}</strong></div>
+      <div class="popup-row">${s.desc}</div>
+      <div class="popup-row" style="margin-top:6px;color:#888">Strategische score op basis van verbindingsanalyse</div>
+    `);
+
+    stallingMarkers.push(marker);
+  });
+
+  // Show recommendations in sidebar
+  const recSection = document.getElementById('rec-section');
+  recSection.style.display = 'block';
+
+  const recList = document.getElementById('rec-list');
+  recList.innerHTML = '';
+
+  top.forEach((s, i) => {
+    const item = document.createElement('div');
+    item.className = 'rec-item';
+    item.style.cursor = 'pointer';
+    item.innerHTML = `
+      <div class="rec-rank">${i + 1}</div>
+      <div>
+        <div class="rec-name">${s.name}</div>
+        <div class="rec-why">${s.desc}</div>
+      </div>
+    `;
+    item.onclick = () => {
+      map.flyTo([s.lat, s.lng], 15, { duration: 0.8 });
+      stallingMarkers[i]?.openPopup();
+    };
+    recList.appendChild(item);
+  });
+
+  document.getElementById('instruction').innerHTML =
+    `<strong>✅ Analyse klaar!</strong><br>Top <strong>${top.length} stallinglocaties</strong> gemarkeerd op de kaart (🅿). Klik op een aanbeveling om in te zoomen.`;
+}
+
+function clearRecommendations() {
+  stallingMarkers.forEach(m => map.removeLayer(m));
+  stallingMarkers = [];
+  document.getElementById('rec-section').style.display = 'none';
+  document.getElementById('rec-list').innerHTML = '';
+}
+
+// ── Clear all ──
+function clearAll() {
+  connections.forEach(c => {
+    map.removeLayer(c.line);
+    map.removeLayer(c.midMarker);
+  });
+  connections = [];
+  connLines = [];
+  clearRecommendations();
+  resetAllHighlights();
+  selectedFirst = null;
+  updateSidebar();
+  updateStats();
+  document.getElementById('instruction').innerHTML =
+    '<strong>📌 Gewist.</strong><br>Zet modus op <strong>Verbinden</strong> en klik op hotspots om te beginnen.';
+}
+</script>
+</body>
+</html>
